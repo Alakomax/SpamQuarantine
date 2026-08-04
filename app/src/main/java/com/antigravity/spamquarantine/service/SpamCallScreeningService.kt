@@ -2,6 +2,7 @@ package com.antigravity.spamquarantine.service
 
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.provider.ContactsContract
 import android.telecom.Call
 import android.telecom.CallScreeningService
@@ -72,14 +73,16 @@ class SpamCallScreeningService : CallScreeningService() {
                 )
 
                 // Responder a Android: Cortar llamada antes de sonar
-                val response = CallResponse.Builder()
+                val responseBuilder = CallResponse.Builder()
                     .setDisallowCall(true)  // Bloquear
                     .setRejectCall(true)    // Rechazar llamada
                     .setSkipCallLog(false)  // Conservar en log para auditoría
-                    .setSkipNotification(true) // No mostrar notificación nativa molesta
-                    .build()
 
-                respondToCall(callDetails, response)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    responseBuilder.setSkipNotification(true)
+                }
+
+                respondToCall(callDetails, responseBuilder.build())
             } else {
                 Log.d("SpamScreening", "Llamada $normalizedNumber no coincide con ningún patrón de spam. Permitido.")
                 respondToCall(callDetails, CallResponse.Builder().build())
