@@ -13,7 +13,7 @@ object PhoneUtils {
      * "+56 600 338 0002" -> "+566003380002"
      */
     fun normalizeChilePhoneNumber(rawNumber: String?): String {
-        if (rawNumber.isNull_or_empty_custom()) return ""
+        if (rawNumber.isNullOrBlank()) return ""
 
         // Eliminar caracteres no numéricos excepto el signo + al inicio
         var digits = rawNumber.replace(Regex("[^0-9+]"), "")
@@ -36,10 +36,6 @@ object PhoneUtils {
         }
 
         return if (digits.startsWith("+")) digits else "+56$digits"
-    }
-
-    private fun String?.isNull_or_empty_custom(): Boolean {
-        return this == null || this.trim().isEmpty()
     }
 
     /**
