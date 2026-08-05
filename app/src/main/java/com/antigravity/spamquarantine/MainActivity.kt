@@ -3,23 +3,30 @@ package com.antigravity.spamquarantine
 import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import com.antigravity.spamquarantine.ui.HomeScreen
 import com.antigravity.spamquarantine.ui.QuarantineScreen
 import com.antigravity.spamquarantine.ui.RulesScreen
+import com.antigravity.spamquarantine.ui.theme.SpamQuarantineTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -36,9 +43,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val prefs = getSharedPreferences("app_settings", MODE_PRIVATE)
+        val defaultDark = prefs.getBoolean("is_dark_mode", true) // Modo oscuro por defecto
+
         setContent {
-            MaterialTheme {
-                MainAppStructure(onRequestRole = { requestCallScreeningRole() })
+            var isDarkMode by remember { mutableStateOf(defaultDark) }
+
+            SpamQuarantineTheme(darkTheme = isDarkMode) {
+                MainAppStructure(
+                    isDarkMode = isDarkMode,
+                    onToggleDarkMode = {
+                        val newMode = !isDarkMode
+                        isDarkMode = newMode
+                        prefs.edit().putBoolean("is_dark_mode", newMode).apply()
+                    },
+                    onRequestRole = { requestCallScreeningRole() }
+                )
             }
         }
     }
@@ -58,11 +78,38 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainAppStructure(onRequestRole: () -> Unit) {
+fun MainAppStructure(
+    isDarkMode: Boolean,
+    onToggleDarkMode: () -> Unit,
+    onRequestRole: () -> Unit
+) {
     var selectedTab by remember { mutableStateOf(0) }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "SpamQuarantine",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                actions = {
+                    IconButton(onClick = onToggleDarkMode) {
+                        Icon(
+                            imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                            contentDescription = if (isDarkMode) "Cambiar a Modo Claro" else "Cambiar a Modo Oscuro"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                )
+            )
+        },
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(

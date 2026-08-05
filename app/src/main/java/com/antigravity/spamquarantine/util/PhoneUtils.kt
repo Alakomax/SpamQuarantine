@@ -58,7 +58,8 @@ object PhoneUtils {
             Pair("^\\+56(600|800|809)\\d+", "Servicios Comerciales y Cobro Revertido (600 / 800 / 809)"),
             Pair("^\\+569(2882|4434|4433|4435)\\d{4}$", "Bloque Móvil Call Center Chile (2882 / 4434 / 4433 / 4435)"),
             Pair("^\\+5680\\d+", "Prefijos Especiales de Cobranza (80 XXX XXXX)"),
-            Pair("^\\+5622\\d{7}$", "Telemarketing Fijo Santiago (22 XXX XXXX)")
+            Pair("^\\+5622\\d{7}$", "Telemarketing Fijo Santiago (22 XXX XXXX)"),
+            Pair("^\\+56(44|43|42|45|41)\\d+", "Rango Números Comerciales (44 / 4X VoIP)")
         )
     }
 }
