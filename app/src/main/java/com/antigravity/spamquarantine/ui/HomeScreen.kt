@@ -3,11 +3,14 @@ package com.antigravity.spamquarantine.ui
 import android.app.role.RoleManager
 import android.content.Context
 import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,6 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.antigravity.spamquarantine.data.db.AppDatabase
+import com.antigravity.spamquarantine.util.UpdateInfo
+import com.antigravity.spamquarantine.util.UpdateManager
 import kotlinx.coroutines.launch
 
 @Composable
@@ -27,7 +32,29 @@ fun HomeScreen(onRequestRole: () -> Unit) {
     var blockedCount by remember { mutableStateOf(0) }
     var rulesCount by remember { mutableStateOf(0) }
     var isRoleGranted by remember { mutableStateOf(checkRoleGranted(context)) }
+
+    val currentVersion = remember {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.1"
+        } catch (e: Exception) {
+            "1.0.1"
+        }
+    }
+
+    var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var isDownloading by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
+
+    val checkUpdates = {
+        isCheckingUpdate = true
+        scope.launch {
+            val result = UpdateManager.checkForUpdates(currentVersion)
+            updateInfo = result
+            isCheckingUpdate = false
+        }
+    }
 
     LaunchedEffect(Unit) {
         scope.launch {
@@ -36,6 +63,7 @@ fun HomeScreen(onRequestRole: () -> Unit) {
             rulesCount = db.ruleDao().getRuleCount()
             isRoleGranted = checkRoleGranted(context)
         }
+        checkUpdates()
     }
 
     Column(
@@ -43,7 +71,7 @@ fun HomeScreen(onRequestRole: () -> Unit) {
             .fillMaxSize()
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Tarjeta de Estado del Filtro
         Card(
@@ -70,7 +98,7 @@ fun HomeScreen(onRequestRole: () -> Unit) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = if (isRoleGranted)
-                            "El filtro de llamadas previo a timbre está interceptando números spam."
+                            "El filtro previo a timbre está interceptando números spam en 0 repiques."
                         else
                             "Debes otorgar el rol de Filtro de llamadas para bloquear automáticamente.",
                         color = Color(0xFFE2E8F0),
@@ -94,6 +122,103 @@ fun HomeScreen(onRequestRole: () -> Unit) {
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text("Activar Filtro de Llamadas Predeterminado", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        // Tarjeta de Actualizaciones In-App
+        val info = updateInfo
+        if (info != null && info.hasUpdate) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF065F46)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "¡Nueva versión ${info.latestVersionName} disponible!",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                            Text(
+                                text = "Versión actual instalada: v$currentVersion",
+                                color = Color(0xFFA7F3D0),
+                                fontSize = 12.sp
+                            )
+                        }
+                        Icon(imageVector = Icons.Default.Download, contentDescription = null, tint = Color.White)
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (isDownloading) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text("Descargando actualización: $downloadProgress%", color = Color.White, fontSize = 13.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            LinearProgressIndicator(
+                                progress = { downloadProgress / 100f },
+                                modifier = Modifier.fillMaxWidth(),
+                                color = Color(0xFF34D399),
+                                trackColor = Color(0xFF047857)
+                            )
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                isDownloading = true
+                                scope.launch {
+                                    UpdateManager.downloadAndInstallApk(
+                                        context = context,
+                                        downloadUrl = info.downloadUrl,
+                                        onProgress = { downloadProgress = it },
+                                        onError = { errorMsg ->
+                                            isDownloading = false
+                                            Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                                        }
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                        ) {
+                            Text("Actualizar ahora sin desinstalar", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        } else {
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text("Versión de la app: v$currentVersion", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            text = if (isCheckingUpdate) "Verificando en GitHub..." else "La app está actualizada.",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
+                    IconButton(
+                        onClick = { checkUpdates() },
+                        enabled = !isCheckingUpdate
+                    ) {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = "Buscar actualizaciones")
+                    }
+                }
             }
         }
 

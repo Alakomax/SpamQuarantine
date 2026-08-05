@@ -39,10 +39,10 @@ jobs:
     - name: Publicar Release Oficial en GitHub
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: v1.0.0
-        name: "SpamQuarantine v1.0.0 - Lanzamiento Oficial"
+        tag_name: ${{ github.ref_name }}
+        name: "SpamQuarantine ${{ github.ref_name }}"
         body: |
-          ### 📱 SpamQuarantine v1.0.0 - Versión Oficial para Android
+          ### 📱 SpamQuarantine ${{ github.ref_name }} - Lanzamiento para Android
           
           Haz clic en **`app-debug.apk`** para descargar la aplicación directamente a tu teléfono.
           
