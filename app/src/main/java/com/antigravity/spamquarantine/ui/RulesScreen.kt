@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.sp
 import com.antigravity.spamquarantine.data.db.AppDatabase
 import com.antigravity.spamquarantine.data.model.RuleEntity
 import com.antigravity.spamquarantine.util.PhoneUtils
+import com.antigravity.spamquarantine.util.SpamRuleCache
 import kotlinx.coroutines.launch
 
 @Composable
@@ -41,6 +42,7 @@ fun RulesScreen() {
                 currentRules = db.ruleDao().getAllRules()
             }
             rules = currentRules
+            SpamRuleCache.updateCache(currentRules)
         }
     }
 

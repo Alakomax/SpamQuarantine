@@ -11,6 +11,7 @@ import com.antigravity.spamquarantine.data.db.AppDatabase
 import com.antigravity.spamquarantine.data.model.QuarantineLogEntity
 import com.antigravity.spamquarantine.data.model.RuleEntity
 import com.antigravity.spamquarantine.util.PhoneUtils
+import com.antigravity.spamquarantine.util.SpamRuleCache
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -38,55 +39,52 @@ class SpamCallScreeningService : CallScreeningService() {
             return
         }
 
-        // 2. Evaluar reglas de patrones de spam activas en la BD
-        serviceScope.launch {
-            val db = AppDatabase.getDatabase(applicationContext)
-            var activeRules = db.ruleDao().getActiveRules()
+        // 2. Obtener reglas activas en memoria de forma síncrona (sub-milisegundos)
+        val activeRules = SpamRuleCache.getActiveRulesSync(applicationContext)
 
-            // Si la base de datos está vacía, precargar las reglas por defecto para Chile
-            if (activeRules.isEmpty() && db.ruleDao().getRuleCount() == 0) {
-                PhoneUtils.getDefaultChileSpamPatterns().forEach { (pattern, desc) ->
-                    db.ruleDao().insertRule(RuleEntity(pattern = pattern, description = desc))
-                }
-                activeRules = db.ruleDao().getActiveRules()
+        var matchedRule: RuleEntity? = null
+        for (rule in activeRules) {
+            if (PhoneUtils.matchesRegexPattern(normalizedNumber, rule.pattern) ||
+                PhoneUtils.matchesRegexPattern(rawNumber, rule.pattern)) {
+                matchedRule = rule
+                break
+            }
+        }
+
+        if (matchedRule != null) {
+            Log.w("SpamScreening", "LLAMADA SPAM DETECTADA Y BLOQUEADA: $normalizedNumber por patrón ${matchedRule.pattern}")
+
+            // Responder a Android INMEDIATAMENTE: Cortar llamada antes de sonar (0 repiques)
+            val responseBuilder = CallResponse.Builder()
+                .setDisallowCall(true)  // Bloquear
+                .setRejectCall(true)    // Rechazar llamada
+                .setSkipCallLog(false)  // Conservar en log para auditoría
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                responseBuilder.setSkipNotification(true)
             }
 
-            var matchedRule: RuleEntity? = null
-            for (rule in activeRules) {
-                if (PhoneUtils.matchesRegexPattern(normalizedNumber, rule.pattern) ||
-                    PhoneUtils.matchesRegexPattern(rawNumber, rule.pattern)) {
-                    matchedRule = rule
-                    break
-                }
-            }
+            respondToCall(callDetails, responseBuilder.build())
 
-            if (matchedRule != null) {
-                Log.w("SpamScreening", "LLAMADA SPAM DETECTADA Y BLOQUEADA: $normalizedNumber por patrón ${matchedRule.pattern}")
-
-                // Registrar en la base de datos de Cuarentena
-                db.quarantineDao().insertLog(
-                    QuarantineLogEntity(
-                        rawPhoneNumber = rawNumber,
-                        normalizedPhoneNumber = normalizedNumber,
-                        matchedPattern = matchedRule.pattern
+            // Registrar en la base de datos de Cuarentena en segundo plano (asíncrono)
+            val matchedPattern = matchedRule.pattern
+            serviceScope.launch {
+                try {
+                    val db = AppDatabase.getDatabase(applicationContext)
+                    db.quarantineDao().insertLog(
+                        QuarantineLogEntity(
+                            rawPhoneNumber = rawNumber,
+                            normalizedPhoneNumber = normalizedNumber,
+                            matchedPattern = matchedPattern
+                        )
                     )
-                )
-
-                // Responder a Android: Cortar llamada antes de sonar
-                val responseBuilder = CallResponse.Builder()
-                    .setDisallowCall(true)  // Bloquear
-                    .setRejectCall(true)    // Rechazar llamada
-                    .setSkipCallLog(false)  // Conservar en log para auditoría
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    responseBuilder.setSkipNotification(true)
+                } catch (e: Exception) {
+                    Log.e("SpamScreening", "Error registrando en Cuarentena: ${e.message}")
                 }
-
-                respondToCall(callDetails, responseBuilder.build())
-            } else {
-                Log.d("SpamScreening", "Llamada $normalizedNumber no coincide con ningún patrón de spam. Permitido.")
-                respondToCall(callDetails, CallResponse.Builder().build())
             }
+        } else {
+            Log.d("SpamScreening", "Llamada $normalizedNumber no coincide con ningún patrón de spam. Permitido.")
+            respondToCall(callDetails, CallResponse.Builder().build())
         }
     }
 
